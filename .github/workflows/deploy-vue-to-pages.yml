@@ -1,0 +1,57 @@
+name: Deploy Vue 3 App to GitHub Pages
+
+on:
+  # 触发条件：监听 main 分支的推送
+  push:
+    branches:
+      - main
+  # 也可以手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "latest"
+          cache: "pnpm"
+          cache-dependency-path: "./pnpm-lock.yaml"
+
+      - name: pnpm install
+        run: pnpm i --frozen-lockfile
+
+      - name: Build Vue 3 project
+        run: pnpm build
+
+      - name: Verify build output
+        run: test -d ./dist # 确保构建目录存在
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist # 假设构建后的文件在 dist 文件夹中
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
