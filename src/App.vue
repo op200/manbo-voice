@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { NAlert, NButton, NConfigProvider, NH1, NInput, NInputGroup, NList, NListItem, NP, NSelect, NSpace, NUpload, NUploadDragger, darkTheme, dateZhCN, lightTheme, useOsTheme, zhCN, type UploadFileInfo, NA } from 'naive-ui';
-import { computed, ref } from 'vue';
+import { LogoGithub } from '@vicons/ionicons5';
+import { NA, NAlert, NButton, NConfigProvider, NDropdown, NH1, NIcon, NInput, NInputGroup, NP, NProgress, NSelect, NSpace, NUpload, NUploadDragger, darkTheme, dateZhCN, lightTheme, useOsTheme, zhCN, type UploadFileInfo, NForm } from 'naive-ui';
+import { computed, h, ref } from 'vue';
+
+const home_link = 'https://github.com/op200/manbo-voice'
 
 const currentLang = ref({ 'lang': zhCN, 'dateLang': dateZhCN })
 
+const text_to_pages_default_len = 100
 
 const osTheme = useOsTheme()
 const theme = computed(() => (osTheme.value === 'dark' ? darkTheme : lightTheme))
@@ -45,7 +49,9 @@ const text_val = ref<string>("")
 type Audio_format = "mp3" | "wav"
 const audio_format = ref<Audio_format>("wav")
 
+const pages = ref<string[]>([])
 const res_audio_url_list = ref<string[]>([])
+const is_in_get_res = ref<boolean>(false)
 
 const url_ill_regex = /[!#$&*+/=@\[\]]/g
 
@@ -91,22 +97,29 @@ interface Api_res {
   api_source: string;
 }
 async function api_submit() {
-  for (const text of text_to_pages(text_val.value, 100)) {
+  is_in_get_res.value = true
+  for (const [i, text] of pages.value.entries()) {
     const url = `https://api.milorapart.top/apis/mbAIsc?format=${audio_format.value}&text=${text}`
     console.debug(api_submit.name, url, text, text.length)
-    const res = await fetch(url)
-    res.json()
-      .then((data: Api_res) => {
+    let is_not_break: boolean = true
+    while (is_not_break) {
+      try {
+        const res = await fetch(url)
+        const data: Api_res = await res.json()
         if (data.code !== 200) {
           console.error("faild", url, data)
         }
         else {
           console.debug("success", url, data)
           res_audio_url_list.value.push(data.url)
+          is_not_break = false
         }
-      })
-      .catch(err => console.error("catch error", err))
+      } catch (err) {
+        console.error("catch error", err)
+      }
+    }
   }
+  is_in_get_res.value = false
 }
 </script>
 
@@ -116,14 +129,22 @@ async function api_submit() {
       <div id="pack-box">
         <n-space vertical>
 
-          <n-h1 style="text-align: center;">文本转曼波配音</n-h1>
+
+          <n-dropdown trigger="hover" placement="top" :options="[
+            {
+              label: () => h(NA, { href: home_link }, { default: () => 'Github' }),
+              icon: () => h(NIcon, null, { default: () => h(LogoGithub) }),
+            },
+          ]">
+            <n-h1 style="text-align: center;cursor: help;">文本转曼波配音</n-h1>
+          </n-dropdown>
 
           <n-alert v-show="new RegExp(url_ill_regex.source, url_ill_regex.flags).test(text_val)" title="存在非法字符"
             type="warning">
             存在非法字符
           </n-alert>
 
-          <n-upload multiple directory-dnd @update:file-list="(fileList: UploadFileInfo[]) => {
+          <n-upload :disabled="is_in_get_res" multiple directory-dnd @update:file-list="(fileList: UploadFileInfo[]) => {
             text_val = ''
             fileList.forEach(file_info => {
               const f = file_info.file
@@ -136,10 +157,11 @@ async function api_submit() {
             </n-upload-dragger>
           </n-upload>
 
-          <n-input id="input-area" v-model:value="text_val" type="textarea" placeholder="输入文本" />
+          <n-input :disabled="is_in_get_res" id="input-area" v-model:value="text_val" type="textarea"
+            placeholder="输入文本" />
 
           <n-input-group>
-            <n-select v-model:value="audio_format" :options="[
+            <n-select :disabled="is_in_get_res" v-model:value="audio_format" :options="[
               {
                 label: 'WAV',
                 value: 'wav',
@@ -149,24 +171,32 @@ async function api_submit() {
                 value: 'mp3',
               },
             ]" />
-            <n-button @click="api_submit">提交</n-button>
+            <n-button :disabled="is_in_get_res" @click="() => {
+              pages = text_to_pages(text_val, text_to_pages_default_len)
+              api_submit()
+            }">提交</n-button>
           </n-input-group>
 
-          <n-list>
-            <n-list-item v-for="url, i in res_audio_url_list">
-              <n-a :href="url">{{ url }}</n-a>
-            </n-list-item>
-          </n-list>
-
-          <n-button v-show="res_audio_url_list.length" @click="async () => {
-            for (let i = 0; i < res_audio_url_list.length; i++) {
-              const url = res_audio_url_list[i] as string
-              await downloadFileWithDelay(url,
-                i.toString().padStart(res_audio_url_list.length.toString().length, '0')
-              )
-            }
-          }
-          ">全部下载</n-button>
+          <n-space vertical v-show="is_in_get_res || res_audio_url_list.length">
+            <n-progress type="line" :percentage="res_audio_url_list.length / pages.length * 100"
+              indicator-placement="inside" :processing="pages.length !== res_audio_url_list.length" />
+            <n-space :justify="'center'">
+              <n-dropdown trigger="hover" :options="res_audio_url_list.map(url => ({
+                label: () => h(NA, { href: url }, { default: () => url.replace(/^https:\/\/api\.milorapart\.top\/voice\//, '') })
+              }))">
+                <n-button :disabled="pages.length !== res_audio_url_list.length" @click="async () => {
+                  for (let i = 0; i < res_audio_url_list.length; i++) {
+                    const url = res_audio_url_list[i] as string
+                    await downloadFileWithDelay(url,
+                      i.toString().padStart(res_audio_url_list.length.toString().length, '0')
+                    )
+                  }
+                }
+                ">{{ res_audio_url_list.length }} / {{ pages.length }}
+                  全部下载</n-button>
+              </n-dropdown>
+            </n-space>
+          </n-space>
 
         </n-space>
       </div>
