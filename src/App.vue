@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { LogoGithub } from '@vicons/ionicons5';
-import { NA, NAlert, NButton, NConfigProvider, NDropdown, NH1, NIcon, NInput, NInputGroup, NP, NProgress, NSelect, NSpace, NUpload, NUploadDragger, darkTheme, dateZhCN, lightTheme, useOsTheme, zhCN, type UploadFileInfo, NForm } from 'naive-ui';
-import { computed, h, ref } from 'vue';
+import { LogoGithub } from '@vicons/ionicons5'
+import { NA, NAlert, NButton, NCascader, NConfigProvider, NDropdown, NFlex, NH1, NIcon, NInput, NInputGroup, NP, NProgress, NSelect, NSpace, NUpload, NUploadDragger, darkTheme, dateZhCN, lightTheme, useOsTheme, zhCN, type UploadFileInfo } from 'naive-ui'
+import { computed, h, ref } from 'vue'
 
 const home_link = 'https://github.com/op200/manbo-voice'
 
@@ -86,36 +86,42 @@ function text_to_pages(text: string, one_page_size: number): string[] {
   return res
 }
 
+const api_url_list = ref<string[]>([
+  "https://api.milorapart.top/apis/mbAIsc",
+  "https://apis.uctb.cn/api/mbAIsc",
+])
+const api_select = ref<string>(api_url_list.value[0] as string)
+const temp_api_url = ref<string>("")
 interface Api_res {
   /** 状态码，200表示成功 */
-  code: number;
+  code: number
   /** 消息描述 */
-  msg: string;
+  msg: string
   /** 生成的音频文件URL */
-  url: string;
+  url: string
   /** API 来源信息 */
-  api_source: string;
+  api_source: string
 }
 async function api_submit() {
   is_in_get_res.value = true
   for (const [i, text] of pages.value.entries()) {
-    const url = `https://api.milorapart.top/apis/mbAIsc?format=${audio_format.value}&text=${text}`
+    const url = `${api_select.value}?format=${audio_format.value}&text=${text}`
     console.debug(api_submit.name, url, text, text.length)
-    let is_not_break: boolean = true
-    while (is_not_break) {
+    while (true) {
       try {
         const res = await fetch(url)
         const data: Api_res = await res.json()
-        if (data.code !== 200) {
-          console.error("faild", url, data)
-        }
-        else {
-          console.debug("success", url, data)
-          res_audio_url_list.value.push(data.url)
-          is_not_break = false
-        }
+        if (data.code !== 200)
+          throw Error(data.code.toString())
+
+        console.debug("success", url, data)
+        res_audio_url_list.value.push(data.url)
+
+        break
+
       } catch (err) {
-        console.error("catch error", err)
+        console.error("fetch error", err, url)
+        await new Promise(resolve => setTimeout(resolve, 2000))
       }
     }
   }
@@ -143,6 +149,18 @@ async function api_submit() {
             type="warning">
             存在非法字符
           </n-alert>
+
+          <n-flex :wrap="false">
+            <n-cascader v-model:value="api_select"
+              :options="api_url_list.map(url => ({ label: url.replace(/^https:\/\//, '').replace(/\/.*/, ''), value: url }))"
+              check-strategy="child" />
+            <n-input-group>
+              <n-input v-model:value="temp_api_url" placeholder="临时添加 API" />
+              <n-button @click="api_url_list.push(temp_api_url), temp_api_url = ''">
+                添加
+              </n-button>
+            </n-input-group>
+          </n-flex>
 
           <n-upload :disabled="is_in_get_res" multiple directory-dnd @update:file-list="(fileList: UploadFileInfo[]) => {
             text_val = ''
